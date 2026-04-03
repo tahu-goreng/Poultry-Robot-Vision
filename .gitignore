@@ -10,3 +10,6 @@ ros_ws/log/
 
 # VS Code
 .vscode/
+
+# Ignore sample images and video folder
+Sample images and video/
