@@ -1,0 +1,12 @@
+# Large binary files
+*.avi
+*.webm
+*.mp4
+
+# ROS build files
+ros_ws/build/
+ros_ws/install/
+ros_ws/log/
+
+# VS Code
+.vscode/
