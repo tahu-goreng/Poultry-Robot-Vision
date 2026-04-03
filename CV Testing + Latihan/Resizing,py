@@ -1,0 +1,36 @@
+import cv2 as cv
+
+image = cv.imread("test_img.png")
+video = cv.VideoCapture("IMG_E2872.MOV")
+
+def resize(frame, scale=1.5):
+    #For pre-prepared video
+    height=int(frame.shape[0]*scale)
+    width=int(frame.shape[1]*scale)
+
+    dimensions = (width, height)
+
+    return cv.resize(frame, dimensions, interpolation=cv.INTER_AREA)
+
+def changeRes(width, height):
+    #For live video only (from webcam, etc.)
+    video.set(3,width)
+    video.set(4, height)
+
+
+while True:
+    tf, frame = video.read()
+    frame_resize = resize(frame)
+
+    cv.imshow("Original Video", frame)
+    cv.imshow("Resized video", frame_resize)
+
+    if cv.waitKey(20)&0xFF == ord('d'): 
+        # 0xFF is optional
+        # 0xFF is literally 00000000 00000000 00000000 11111111, and used to filter the cv.waitkey() since in some os
+        # the first 3 byte (1 byte = 8 bits) contains garbage and the only output used form cv.waitKey() is
+        # the last byte only
+        break
+
+video.release()
+cv.destroyAllWindows()
