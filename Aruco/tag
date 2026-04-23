@@ -1,0 +1,19 @@
+import cv2
+
+# load file kecil (10x10)
+img = cv2.imread("tag36_11_00000.png", cv2.IMREAD_GRAYSCALE)
+
+if img is None:
+    print("ERROR: file tidak ditemukan")
+    exit()
+
+print("Original size:", img.shape)
+
+# upscale tanpa blur
+scale = 80
+big = cv2.resize(img, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+
+# save hasil
+cv2.imwrite("apriltag_HD.png", big)
+
+print("DONE! apriltag_HD.png siap print")
