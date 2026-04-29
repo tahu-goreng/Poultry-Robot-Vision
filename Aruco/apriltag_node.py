@@ -1,120 +1,90 @@
+#!/usr/bin/env python3
+
 import rclpy
-from rclpy.node import node
+from rclpy.node import Node
 
 import cv2
 import time
 import serial
-from pupil_apriltags import detector
+from pupil_apriltags import Detector
 
-from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
+from pupil_apriltags import Detector
 
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
+# Helper 
+def clamp(v, vmin, vmax):
+    return max(vmin, min(v, vmax))
+
+# ROS2 node
 class AprilTag(Node):
-
     def __init__(self):
-        super().__init__('aprilTag_detection')
+        super().__init__("April_tag_node")
+        self.declare_parameter('camera_index',      0)
+        self.declare_parameter('target_tag_id',     0)
+        self.declare_parameter('tag_size',          0.12)
+ 
+        self.declare_parameter('fx', 640.0)
+        self.declare_parameter('fy', 640.0)
+        self.declare_parameter('cx', 320.0)
+        self.declare_parameter('cy', 240.0)
+ 
+        self.declare_parameter('k_v',  0.55)
+        self.declare_parameter('k_w',  1.80)
+ 
+        self.declare_parameter('max_v', 0.30)
+        self.declare_parameter('min_v', 0.00)
+        self.declare_parameter('max_w', 1.00)
+ 
+        self.declare_parameter('search_w',          0.35)
+        self.declare_parameter('approach_z',        1.20)
+        self.declare_parameter('slow_z',            0.50)
+        self.declare_parameter('dock_z',            0.25)
+        self.declare_parameter('center_tol',        0.03)
+ 
+        self.declare_parameter('send_period',       0.05)   # seconds
+        self.declare_parameter('lost_tag_timeout',  0.80)   # seconds
+        self.declare_parameter('alpha',             0.70)   # EMA filter weight
+ 
+        self._load_params()
 
-        # ===================== PARAMETERS =====================
-        self.declare_parameter('scan_topic', '/scan')
-        self.declare_parameter('cmd_vel_topic', '/cmd_vel')
+        self.detector = Detector(families='tag36h11')
 
-        self.declare_parameter('front_threshold', 0.6)   # meter
-        self.declare_parameter('side_threshold',  0.7)   # meter
-
-        self.declare_parameter('forward_speed', 0.30)    # m/s
-        self.declare_parameter('turn_speed',    0.80)    # rad/s
-
-        # ===================== QoS (IMPORTANT FIX) =====================
-        qos_laser = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
-
+        # QoS
         qos_cmd = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
+ 
+        # Publishers
+        self.twist_pub = self.create_publisher(Twist, '/cmd_vel_bridge', 10)
+        self.state_pub = self.create_publisher(String, '/docking_state', 10)
 
-        # ===================== SUBSCRIBER =====================
-        self.scan_sub = self.create_subscription(
-            LaserScan,
-            self.get_parameter('scan_topic').value,
-            self.scan_callback,
-            qos_laser        # <<< FIXED QoS
-        )
+        # Publisher 
+        self.cmd_pub = self.create_publisher(Twist, self.get_parameter('cmd_vel_topic').value, qos_cmd)
+        
+        self.get_logger().info("April Tag Docking")
 
-        # ===================== PUBLISHER =====================
-        self.cmd_pub = self.create_publisher(
-            Twist,
-            self.get_parameter('cmd_vel_topic').value,
-            qos_cmd
-        )
-
-        self.get_logger().info("Reactive Obstacle Avoidance STARTED (QoS FIXED)")
-
-
-    # ========================================================
-    # LaserScan callback
-    # ========================================================
-    def scan_callback(self, msg: LaserScan):
-
-        ranges = list(msg.ranges)
-        size   = len(ranges)
-
-        # Replace invalid readings
-        ranges = [
-            r if (msg.range_min < r < msg.range_max) else float('inf')
-            for r in ranges
-        ]
-
-        # ===================== ZONES =====================
-        front_idx = size // 2
-        front = min(ranges[front_idx - 10 : front_idx + 10])
-
-        left  = min(ranges[int(size * 0.70) : int(size * 0.80)])
-        right = min(ranges[int(size * 0.20) : int(size * 0.30)])
-
-        front_th = self.get_parameter('front_threshold').value
-        side_th  = self.get_parameter('side_threshold').value
-
-        fwd_speed  = self.get_parameter('forward_speed').value
-        turn_speed = self.get_parameter('turn_speed').value
-
-        cmd = Twist()
-
-        # ===================== DECISION LOGIC =====================
-        if front > front_th:
-            # Path is clear → go forward
-            cmd.linear.x  = fwd_speed
-            cmd.angular.z = 0.0
-
+        self.timer = self.create_timer(timer berapa?????????,self.april_tag_detection)
+    
+    def april_tag_detection (self):
+        last_seen =
+        cap = cv2.VideoCapture(self.camera_index)
+        if not cap.isOpened():
+            self.get_logger().info("No tags found")
+            last_seen = time.time()
         else:
-            # Obstacle ahead → turn to freer side
-            cmd.linear.x = 0.0
 
-            if left > right and left > side_th:
-                cmd.angular.z =  turn_speed     # turn left
-            else:
-                cmd.angular.z = -turn_speed     # turn right
-
-        self.cmd_pub.publish(cmd)
-
-
-# ============================================================
 def main(args=None):
-    rclpy.init(args=args)
-    node = ReactiveAvoidance()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    node.destroy_node()
-    rclpy.shutdown()
+    rclpy.init(args=args) #initialized ros
 
+    node = AprilTag()
+    rclpy.spin(node)
+    
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
