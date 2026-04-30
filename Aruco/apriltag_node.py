@@ -70,6 +70,36 @@ class AprilTag(Node):
 
         self.timer = self.create_timer(timer berapa?????????,self.april_tag_detection)
     
+    def load_params(self):
+        g = self.get_parameters
+
+        self.camera_index     = g('camera_index').value
+        self.target_tag_id    = g('target_tag_id').value
+        self.tag_size         = g('tag_size').value
+ 
+        self.fx = g('fx').value
+        self.fy = g('fy').value
+        self.cx = g('cx').value
+        self.cy = g('cy').value
+ 
+        self.k_v  = g('k_v').value
+        self.k_w  = g('k_w').value
+ 
+        self.max_v = g('max_v').value
+        self.min_v = g('min_v').value
+        self.max_w = g('max_w').value
+ 
+        self.search_w       = g('search_w').value
+        self.approach_z     = g('approach_z').value
+        self.slow_z         = g('slow_z').value
+        self.dock_z         = g('dock_z').value
+        self.center_tol     = g('center_tol').value
+ 
+        self.send_period        = g('send_period').value
+        self.lost_tag_timeout   = g('lost_tag_timeout').value
+        self.alpha              = g('alpha').value
+
+
     def april_tag_detection (self):
         last_seen =
         cap = cv2.VideoCapture(self.camera_index)
