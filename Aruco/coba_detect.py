@@ -17,7 +17,7 @@ while True:
 
     result = detector.detect(bw)
 
-    # print(result[0].corners)
+    print(result)
     # print(result[0].corners[0][0])
     # print(type(result[0].corners[0][0]))
 
@@ -29,7 +29,8 @@ while True:
             cv.line(frame, (corners[j].astype(int)), (corners[(j+1)%4].astype(int)), (0, 0, 255), 2)
 
         planar_post = tag.pose_t
-        rot_pose = tag.pose_r
+        rot_pose = tag.pose_R
+        # print(f'{rot_pose} "/n" {planar_post}')
     
 
     cv.imshow("Camera 0", frame)

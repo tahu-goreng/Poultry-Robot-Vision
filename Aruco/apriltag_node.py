@@ -71,7 +71,9 @@ class AprilTag(Node):
 
         # Video capture initialization
         self.cap = cv2.VideoCapture(self.camera_index)
-        if not cap.isOpened():
+        if not self.cap.isOpened():
+            self.get_logger().info('Log: Camera Error')
+            raise RuntimeError('Camera Error')
 
         self.timer = self.create_timer(self.send_period, self.april_tag_detection)
     
@@ -108,12 +110,92 @@ class AprilTag(Node):
 
 
     def april_tag_detection (self):
-        last_seen =
-        cap = cv2.VideoCapture(self.camera_index)
-        if not cap.isOpened():
-            self.get_logger().info("No tags found")
-            last_seen = time.time()
+        ret, frame = self.cap.read()
+        if not ret:
+            self.get_logger().info("No frame detected")
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        result = self.detector.detect(
+            gray, 
+            estimate_tag_pose=True,
+            camera_params=[self.fx, self.fy, self.cx, self.cy],
+            tag_size=self.tag_size)
+
+    # Display image
+
+        target = []
+        now = 0
+        v = 0.0
+        w = 0.0
+
+        for tag in result:
+            if tag.tag_id == self.target_tag_id:
+                target = tag
+                break
+        
+        if target is None:
+            if now - last_seen > LOST_TAG_TIMEOUT:
+                state = "SEARCH"
+                v = 0.0
+                w = self.search_w
+            else:
+                state = "WAIT"
+                v = 0.0
+                w = 0.0
         else:
+            last_seen = now
+            # Draw bbox
+            corners = target.corners.astype(int)
+            for i in range(4):
+                pt1 = tuple(corners[i])
+                pt2 = tuple(corners[(i+1)%4])
+                cv2.line(frame, pt1, pt2, (0,255,0), 2)
+
+            center = tuple(target.center.astype(int))
+            cv2.circle(frame, center, 5, (0,0,255), -1)
+
+            x_raw = float(target.pose_t[0][0])
+            z_raw = float(target.pose_t[2][0])
+            
+            x_f = self.alpha * x_raw + (1-self.alpha) * x_f
+            z_f = self.alpha * z_raw + (1-self.alpha) * z_f
+
+            x = x_f
+            z = z_f
+
+            # =========================
+            # DEADZONE
+            # =========================
+            if abs(x) < 0.02:
+                x = 0.0
+
+            # =========================
+            # STATE MACHINE
+            # =========================
+            if z > self.approach_z:
+                state = "FAST"
+                v = self.k_v * (z - self.dock_z)
+                w = -self.k_w * x
+
+            elif z > self.slow_z:
+                state = "SLOW"
+                v = 0.4
+                w = -self.k_w* x
+
+            elif z > self.dock_z:
+                state = "ALIGN"
+                v = 0.2
+                w = -1.2 * x
+
+            else:
+                state = "DOCKED"
+                v = 0.0
+                w = 0.0
+
+            
+            cv2.imshow('Robot vision', frame)
+
 
 def main(args=None):
     rclpy.init(args=args) #initialized ros
@@ -122,6 +204,8 @@ def main(args=None):
     rclpy.spin(node)
     
     rclpy.shutdown()
-
+    cv2.destroyAllWindows()
+    cap.release()
+    
 if __name__ == '__main__':
     main()
