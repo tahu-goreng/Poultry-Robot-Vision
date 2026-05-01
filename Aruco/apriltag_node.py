@@ -48,7 +48,8 @@ class AprilTag(Node):
         self.declare_parameter('lost_tag_timeout',  0.80)   # seconds
         self.declare_parameter('alpha',             0.70)   # EMA filter weight
  
-        self._load_params()
+        # Load all params
+        self.load_params()
 
         self.detector = Detector(families='tag36h11')
 
@@ -64,11 +65,15 @@ class AprilTag(Node):
         self.state_pub = self.create_publisher(String, '/docking_state', 10)
 
         # Publisher 
-        self.cmd_pub = self.create_publisher(Twist, self.get_parameter('cmd_vel_topic').value, qos_cmd)
+        self.cmd_pub = self.create_publisher(Twist, self.('cmd_vel_topic').value, qos_cmd)
         
         self.get_logger().info("April Tag Docking")
 
-        self.timer = self.create_timer(timer berapa?????????,self.april_tag_detection)
+        # Video capture initialization
+        self.cap = cv2.VideoCapture(self.camera_index)
+        if not cap.isOpened():
+
+        self.timer = self.create_timer(self.send_period, self.april_tag_detection)
     
     def load_params(self):
         g = self.get_parameters
@@ -98,6 +103,8 @@ class AprilTag(Node):
         self.send_period        = g('send_period').value
         self.lost_tag_timeout   = g('lost_tag_timeout').value
         self.alpha              = g('alpha').value
+
+        
 
 
     def april_tag_detection (self):

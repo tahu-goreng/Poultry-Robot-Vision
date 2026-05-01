@@ -1,3 +1,16 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "ROS2.distro": "humble",
+    "python.autoComplete.extraPaths": [
+        "/home/waesco704/ydlidar_ws/install/yolo_testing/lib/python3.10/site-packages",
+        "/home/waesco704/ydlidar_ws/install/my_robot/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/waesco704/ydlidar_ws/install/yolo_testing/lib/python3.10/site-packages",
+        "/home/waesco704/ydlidar_ws/install/my_robot/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
 }
