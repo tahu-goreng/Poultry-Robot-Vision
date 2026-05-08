@@ -17,6 +17,42 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 def clamp(v, vmin, vmax):
     return max(vmin, min(v, vmax))
 
+# self.pid_v = PIDController(
+#             kp=self.pid_v_kp,
+#             ki=self.pid_v_ki,
+#             kd=self.pid_v_kd,
+#             out_min=self.min_v,
+#             out_max=self.max_v,
+#             integral_limit=self.pid_v_integral_limit,
+
+class PIDController:
+    def __init__(self, kp, ki, kd, out_min, out_max, integral_limit):
+        self.Kp =kp
+        self.Ki = ki
+        self.Kd = kd
+        self.out_min = out_min
+        self.out_max = out_max
+        
+        self.int_error = 0
+        self.integral_limit = integral_limit
+        
+    def compute(self, error, speed):
+        P = self.Kp * error
+        
+        self.int_error += error
+        if (self.int_error>self.integral_limit):
+            self.int_error = self.integral_limit
+        elif (self.int_error<-self.integral_limit):
+            self.int_error = -self.integral_limit
+        I = self.Ki*self.int_error
+
+        D = self.Kd* speed
+
+        return min(self.out_max,(max(self.out_min,(P+I+D))))
+    
+    def reset(self):
+        self.int_error = 0
+
 # ROS2 node
 class AprilTag(Node):
     def __init__(self):
@@ -30,9 +66,20 @@ class AprilTag(Node):
         self.declare_parameter('fy', 640.0)
         self.declare_parameter('cx', 320.0)
         self.declare_parameter('cy', 240.0)
+        # PID constants linear
+        self.declare_parameter('pid_v_kp',  0.55)
+        self.declare_parameter('pid_v_ki',  0.05)
+        self.declare_parameter('pid_v_kd',  0.10)
  
-        self.declare_parameter('k_v',  0.55)
-        self.declare_parameter('k_w',  1.80)
+        # PID constans angular
+        self.declare_parameter('pid_w_kp',  1.80) 
+        self.declare_parameter('pid_w_ki',  0.10)
+        self.declare_parameter('pid_w_kd',  0.15)
+ 
+        # Anti-windup limits for each integrator
+        self.declare_parameter('pid_v_integral_limit', 0.30)
+        self.declare_parameter('pid_w_integral_limit', 0.50)
+
  
         self.declare_parameter('max_v', 0.30)
         self.declare_parameter('min_v', 0.00)
@@ -42,10 +89,9 @@ class AprilTag(Node):
         self.declare_parameter('approach_z',        1.20)
         self.declare_parameter('slow_z',            0.50)
         self.declare_parameter('dock_z',            0.25)
-        self.declare_parameter('center_tol',        0.03)
  
         self.declare_parameter('send_period',       0.05)   # seconds
-        self.declare_parameter('lost_tag_timeout',  0.80)   # seconds   
+        self.declare_parameter('lost_tag_timeout',  2.00)   # seconds   
         # Alpha = EMA filter weight, 0<alpha<1 with the bigger the alpha value meaning the smooting is more
         # biased toward recent data (less smoothing)
         self.declare_parameter('alpha',             0.70) 
@@ -58,6 +104,23 @@ class AprilTag(Node):
  
         # Load all params
         self.load_params()
+
+        self.pid_v = PIDController(
+            kp=self.pid_v_kp,
+            ki=self.pid_v_ki,
+            kd=self.pid_v_kd,
+            out_min=self.min_v,
+            out_max=self.max_v,
+            integral_limit=self.pid_v_integral_limit,
+        )
+        self.pid_w = PIDController(
+            kp=self.pid_w_kp,
+            ki=self.pid_w_ki,
+            kd=self.pid_w_kd,
+            out_min=-self.max_w,
+            out_max= self.max_w,
+            integral_limit=self.pid_w_integral_limit,
+        )
 
         self.detector = Detector(families='tag36h11')
 
@@ -98,8 +161,18 @@ class AprilTag(Node):
         self.cx = g('cx').value
         self.cy = g('cy').value
  
-        self.k_v  = g('k_v').value
-        self.k_w  = g('k_w').value
+        # PID
+        self.pid_v_kp = g('pid_v_kp').value
+        self.pid_v_ki = g('pid_v_ki').value
+        self.pid_v_kd = g('pid_v_kd').value
+ 
+        self.pid_w_kp = g('pid_w_kp').value
+        self.pid_w_ki = g('pid_w_ki').value
+        self.pid_w_kd = g('pid_w_kd').value
+ 
+        self.pid_v_integral_limit = g('pid_v_integral_limit').value
+        self.pid_w_integral_limit = g('pid_w_integral_limit').value
+
  
         self.max_v = g('max_v').value
         self.min_v = g('min_v').value
@@ -109,7 +182,6 @@ class AprilTag(Node):
         self.approach_z     = g('approach_z').value
         self.slow_z         = g('slow_z').value
         self.dock_z         = g('dock_z').value
-        self.center_tol     = g('center_tol').value
  
         self.send_period        = g('send_period').value
         self.lost_tag_timeout   = g('lost_tag_timeout').value
@@ -123,6 +195,7 @@ class AprilTag(Node):
         ret, frame = self.cap.read()
         if not ret:
             self.get_logger().warn("No frame detected")
+            return
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -164,28 +237,18 @@ class AprilTag(Node):
             if abs(x) < 0.02:
                 x = 0.0
 
-            if z > self.approach_z: # 1.25
-                state = "FAST"
-                v = self.k_v * (z - self.dock_z)
-                w = -self.k_w * x
-
-            elif z > self.slow_z: # 0.5
-                state = "SLOW"
-                v = 0.4
-                w = -self.k_w* x
-
-            elif z > self.dock_z: # 0.25
-                state = "ALIGN"
-                v = 0.2
-                w = -1.2 * x
+            if z <= self.dock_z:
+                v=0
+                w=0
+                state = "DOCKED"
 
             else:
-                state = "DOCKED"
-                v = 0.0
-                w = 0.0
+                state = "PID Docking"
+                v = self.pid_v.compute(z, v)
+                w = self.pid_w.compute(x, w)
 
-            v = clamp(v, self.min_v, self.max_v)
-            w = clamp(w, -self.max_w, self.max_w)
+                v = clamp(v, self.min_v, self.max_v)
+                w = clamp(w, -self.max_w, self.max_w)
 
         # Publish command
         twist = Twist()
@@ -213,9 +276,9 @@ class AprilTag(Node):
                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             cv2.imshow('Live feed', frame)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            self.get_logger().info('User pressed Q – shutting down.')
-            rclpy.shutdown()
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                self.get_logger().info('User pressed Q – shutting down.')
+                rclpy.shutdown()
 
     def destroy_node(self):
         self.get_logger().info('Stopping robot')
